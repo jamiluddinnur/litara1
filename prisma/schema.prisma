@@ -1,0 +1,118 @@
+// Litara — Prisma schema (PostgreSQL)
+// Set DATABASE_URL in .env.local / Vercel env vars.
+// Local dev without a Postgres server: create a free hosted Postgres
+// at Neon (neon.tech) or Supabase and paste its connection string.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String         @id @default(cuid())
+  name         String
+  email        String         @unique
+  passwordHash String
+  createdAt    DateTime       @default(now())
+  sessions     Session[]
+  projects     Project[]
+  decisions    Decision[]
+  subscription Subscription?
+  payments     Payment[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id             String    @id @default(cuid())
+  title          String
+  researchQuestion String  @db.Text
+  inclusion      String    @default("") @db.Text
+  exclusion      String    @default("") @db.Text
+  ownerId        String
+  owner          User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  articles       Article[]
+  reviewers      Reviewer[]
+}
+
+model Reviewer {
+  id        String  @id @default(cuid())
+  name      String
+  projectId String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([projectId, name])
+}
+
+model Article {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  authors   String   @default("")
+  year      Int?
+  journal   String   @default("")
+  source    String   @default("Manual") // Scopus, SINTA, Garuda, WoS, DOAJ, Manual
+  doi       String   @default("")
+  abstract  String   @default("") @db.Text
+  relevance Int      @default(0) // 0-100, from research-question keywords
+  duplicateOfId String?
+  labels    String   @default("") // comma-separated
+  createdAt DateTime @default(now())
+  decisions Decision[]
+}
+
+model Decision {
+  id        String   @id @default(cuid())
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  reviewer  String // reviewer name (or user name)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  value     String // include | exclude | maybe
+  reason    String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([articleId, reviewer])
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan      String   @default("free") // free | pro | institusi
+  status    String   @default("active")
+  trialEndsAt DateTime?
+  renewsAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  orderId     String   @unique // LITARA-xxxx
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan        String
+  amount      Int // in IDR
+  method      String   @default("qris") // qris | ewallet | transfer | invoice | card
+  status      String   @default("pending") // pending | paid | failed
+  mode        String   @default("simulasi") // simulasi | midtrans
+  redirectUrl String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
